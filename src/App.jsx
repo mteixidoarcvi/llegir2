@@ -13,9 +13,22 @@ const DEFAULT_WORDS = [
   { key: "paper", emoji: "📄" },
   { key: "pal", emoji: "🪵" },
   { key: "poma", emoji: "🍎" },
-  { key: "fruita", emoji: "🍇" },
+  { key: "kiwi", emoji: "🥝" },
+  { key: "plàtan", emoji: "🍌" },
   { key: "menjar", emoji: "🍽️" },
   { key: "pastís", emoji: "🎂" },
+  { key: "cotxe", emoji: "🚗" },
+  { key: "cor", emoji: "❤️" },
+  { key: "avió", emoji: "✈️" },
+  { key: "ulls", emoji: "👀" },
+  { key: "foc", emoji: "🔥" },
+  { key: "serp", emoji: "🐍" },
+  { key: "llibre", emoji: "📚" },
+  { key: "cuiner", emoji: "👨‍🍳" },
+  { key: "llapis", emoji: "✏️" },
+  { key: "tissora", emoji: "✂️" },
+  { key: "llit", emoji: "🛏️" },
+  { key: "bebé", emoji: "👶" },
 ];
 
 function shuffle(arr) {
@@ -55,27 +68,70 @@ function useBeeps() {
   return { success, error };
 }
 
-function speak(word, voiceLang = "ca-ES") {
-  if (!("speechSynthesis" in window)) return;
-  const utter = new SpeechSynthesisUtterance(word);
-  const voices = window.speechSynthesis.getVoices();
-  const ca = voices.find(v => v.lang?.toLowerCase().startsWith(voiceLang.toLowerCase()));
-  if (ca) utter.voice = ca;
-  utter.rate = 0.9;
-  utter.pitch = 1.0;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utter);
+// --- Web Speech: selecció de veu i idioma robusta ---------------------------
+function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
+  const [voice, setVoice] = useState(null);
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+
+    const pickVoice = () => {
+      const list = synth.getVoices?.() || [];
+      if (!list.length) return; // esperarem a voiceschanged
+      // Tria per ordre de preferència: ca-ES -> ca -> es-ES -> es -> primera
+      const chosen = preferredLangs
+        .map((pl) => list.find((v) => v.lang?.toLowerCase().startsWith(pl.toLowerCase())))
+        .find(Boolean) || list[0];
+      setVoice(chosen || null);
+    };
+
+    // Prova d'agafar immediatament (Chrome desktop sol tenir-les ja)
+    pickVoice();
+
+    // iPhone/Android: les veus arriben més tard
+    const handler = () => pickVoice();
+    synth.addEventListener?.("voiceschanged", handler);
+    // Safari: propietat tradicional
+    synth.onvoiceschanged = handler;
+
+    return () => {
+      synth.removeEventListener?.("voiceschanged", handler);
+      if (synth.onvoiceschanged === handler) synth.onvoiceschanged = null;
+    };
+  }, [preferredLangs.join("|")]);
+
+  const speak = (text) => {
+    if (!("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+    const utter = new SpeechSynthesisUtterance(text);
+
+    if (voice) {
+      utter.voice = voice;
+      utter.lang = voice.lang; // assegura idioma congruent amb la veu
+    } else {
+      // Encara sense veu carregada: força idioma perquè no caigui en anglès
+      utter.lang = preferredLangs[0];
+    }
+    utter.rate = 0.9;
+    utter.pitch = 1.0;
+    synth.cancel();
+    synth.speak(utter);
+  };
+
+  return { speak, voice };
 }
 
 export default function App() {
   const [words, setWords] = useState(DEFAULT_WORDS);
   const [uppercase, setUppercase] = useState(true);
-  const [roundSize, setRoundSize] = useState(6);
+  const [roundSize, setRoundSize] = useState(4);
   const [currentKeys, setCurrentKeys] = useState([]);
   const [completed, setCompleted] = useState([]);
   const [selection, setSelection] = useState({ word: null, sound: null, image: null });
   const [celebrate, setCelebrate] = useState(false);
   const { success, error } = useBeeps();
+  const { speak } = useSpeech();
 
   useEffect(() => {
     const keys = shuffle(words).slice(0, roundSize).map(w => w.key);
@@ -148,7 +204,7 @@ export default function App() {
         aria-label={`${type} ${item.key}`}
       >
         {type === "word" && (
-          <div className="text-2xl md:text-3xl font-bold tracking-widest">
+          <div className="text-3xl md:text-4xl font-bold tracking-widest text-black">
             {uppercase ? item.key.toUpperCase() : item.key}
           </div>
         )}
@@ -266,6 +322,15 @@ export default function App() {
 
       <style>{`
         html, body, #root { height: 100%; }
+        body { color: black; }
+        * {
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+          -webkit-tap-highlight-color: transparent;
+        }
       `}</style>
     </div>
   );

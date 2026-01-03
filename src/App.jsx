@@ -322,7 +322,10 @@ export default function App() {
 
       <style>{`
         html, body, #root { height: 100%; }
-        body { color: black; }
+        body {
+          color: black;
+          touch-action: manipulation;
+        }
         * {
           -webkit-user-select: none;
           -moz-user-select: none;
@@ -330,6 +333,11 @@ export default function App() {
           user-select: none;
           -webkit-touch-callout: none;
           -webkit-tap-highlight-color: transparent;
+          touch-action: manipulation;
+        }
+        button, a {
+          -webkit-user-drag: none;
+          -webkit-touch-callout: none;
         }
       `}</style>
     </div>

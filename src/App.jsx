@@ -1,74 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
-
-const WORD_LISTS = [
-  {
-    id: "base",
-    name: "Bàsica",
-    words: [
-      { key: "gos", emoji: "🐶" },
-      { key: "gat", emoji: "🐱" },
-      { key: "sol", emoji: "☀️" },
-      { key: "sí", emoji: "✅" },
-      { key: "no", emoji: "❌" },
-      { key: "papa", emoji: "👨" },
-      { key: "mama", emoji: "👩" },
-      { key: "lluna", emoji: "🌙" },
-      { key: "paper", emoji: "📄" },
-      { key: "pal", emoji: "🪵" },
-      { key: "poma", emoji: "🍎" },
-      { key: "kiwi", emoji: "🥝" },
-      { key: "plàtan", emoji: "🍌" },
-      { key: "menjar", emoji: "🍽️" },
-      { key: "pastís", emoji: "🎂" },
-      { key: "cotxe", emoji: "🚗" },
-      { key: "cor", emoji: "❤️" },
-      { key: "avió", emoji: "✈️" },
-      { key: "ulls", emoji: "👀" },
-      { key: "foc", emoji: "🔥" },
-      { key: "serp", emoji: "🐍" },
-      { key: "llibre", emoji: "📚" },
-      { key: "cuiner", emoji: "👨‍🍳" },
-      { key: "llapis", emoji: "✏️" },
-      { key: "tissora", emoji: "✂️" },
-      { key: "llit", emoji: "🛏️" },
-      { key: "bebé", emoji: "👶" },
-    ],
-  },
-  {
-    id: "animals",
-    name: "Animals",
-    words: [
-      { key: "gos", emoji: "🐶" },
-      { key: "gat", emoji: "🐱" },
-      { key: "ocell", emoji: "🐦" },
-      { key: "serp", emoji: "🐍" },
-      { key: "peix", emoji: "🐟" },
-      { key: "vaca", emoji: "🐄" },
-      { key: "cavall", emoji: "🐴" },
-      { key: "conill", emoji: "🐰" },
-      { key: "lleó", emoji: "🦁" },
-      { key: "elefant", emoji: "🐘" },
-    ],
-  },
-  {
-    id: "casa",
-    name: "Casa i escola",
-    words: [
-      { key: "llit", emoji: "🛏️" },
-      { key: "taula", emoji: "🪑" },
-      { key: "porta", emoji: "🚪" },
-      { key: "llibre", emoji: "📚" },
-      { key: "llapis", emoji: "✏️" },
-      { key: "paper", emoji: "📄" },
-      { key: "tissora", emoji: "✂️" },
-      { key: "motxilla", emoji: "🎒" },
-      { key: "finestra", emoji: "🪟" },
-      { key: "rellotge", emoji: "⏰" },
-    ],
-  },
-];
+import { WORD_LISTS } from "./wordLists";
 
 const STATS_STORAGE_KEY = "llegir2-stats-v1";
 const LAST_LIST_KEY = "llegir2-last-list";

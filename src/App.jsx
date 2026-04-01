@@ -1,35 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
+// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
+import { WORD_LISTS } from "./wordLists";
 
-const DEFAULT_WORDS = [
-  { key: "gos", emoji: "🐶" },
-  { key: "gat", emoji: "🐱" },
-  { key: "sol", emoji: "☀️" },
-  { key: "sí", emoji: "✅" },
-  { key: "no", emoji: "❌" },
-  { key: "papa", emoji: "👨" },
-  { key: "mama", emoji: "👩" },
-  { key: "lluna", emoji: "🌙" },
-  { key: "paper", emoji: "📄" },
-  { key: "pal", emoji: "🪵" },
-  { key: "poma", emoji: "🍎" },
-  { key: "kiwi", emoji: "🥝" },
-  { key: "plàtan", emoji: "🍌" },
-  { key: "menjar", emoji: "🍽️" },
-  { key: "pastís", emoji: "🎂" },
-  { key: "cotxe", emoji: "🚗" },
-  { key: "cor", emoji: "❤️" },
-  { key: "avió", emoji: "✈️" },
-  { key: "ulls", emoji: "👀" },
-  { key: "foc", emoji: "🔥" },
-  { key: "serp", emoji: "🐍" },
-  { key: "llibre", emoji: "📚" },
-  { key: "cuiner", emoji: "👨‍🍳" },
-  { key: "llapis", emoji: "✏️" },
-  { key: "tissora", emoji: "✂️" },
-  { key: "llit", emoji: "🛏️" },
-  { key: "bebé", emoji: "👶" },
-];
+const STATS_STORAGE_KEY = "llegir2-stats-v1";
+const LAST_LIST_KEY = "llegir2-last-list";
 
 function shuffle(arr) {
   const a = [...arr];
@@ -68,7 +43,6 @@ function useBeeps() {
   return { success, error };
 }
 
-// --- Web Speech: selecció de veu i idioma robusta ---------------------------
 function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
   const [voice, setVoice] = useState(null);
 
@@ -78,21 +52,16 @@ function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
 
     const pickVoice = () => {
       const list = synth.getVoices?.() || [];
-      if (!list.length) return; // esperarem a voiceschanged
-      // Tria per ordre de preferència: ca-ES -> ca -> es-ES -> es -> primera
+      if (!list.length) return;
       const chosen = preferredLangs
         .map((pl) => list.find((v) => v.lang?.toLowerCase().startsWith(pl.toLowerCase())))
         .find(Boolean) || list[0];
       setVoice(chosen || null);
     };
 
-    // Prova d'agafar immediatament (Chrome desktop sol tenir-les ja)
     pickVoice();
-
-    // iPhone/Android: les veus arriben més tard
     const handler = () => pickVoice();
     synth.addEventListener?.("voiceschanged", handler);
-    // Safari: propietat tradicional
     synth.onvoiceschanged = handler;
 
     return () => {
@@ -108,9 +77,8 @@ function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
 
     if (voice) {
       utter.voice = voice;
-      utter.lang = voice.lang; // assegura idioma congruent amb la veu
+      utter.lang = voice.lang;
     } else {
-      // Encara sense veu carregada: força idioma perquè no caigui en anglès
       utter.lang = preferredLangs[0];
     }
     utter.rate = 0.9;
@@ -119,48 +87,106 @@ function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
     synth.speak(utter);
   };
 
-  return { speak, voice };
+  return { speak };
+}
+
+function emptySelection() {
+  return { word: null, sound: null, image: null };
 }
 
 export default function App() {
-  const [words, setWords] = useState(DEFAULT_WORDS);
+  const [selectedListId, setSelectedListId] = useState(null);
+  const [showStart, setShowStart] = useState(true);
+  const [showStats, setShowStats] = useState(false);
   const [uppercase, setUppercase] = useState(true);
   const [roundSize, setRoundSize] = useState(4);
   const [currentKeys, setCurrentKeys] = useState([]);
   const [completed, setCompleted] = useState([]);
-  const [selection, setSelection] = useState({ word: null, sound: null, image: null });
+  const [selection, setSelection] = useState(emptySelection());
   const [celebrate, setCelebrate] = useState(false);
+  const [statsByList, setStatsByList] = useState({});
   const { success, error } = useBeeps();
   const { speak } = useSpeech();
 
   useEffect(() => {
-    const keys = shuffle(words).slice(0, roundSize).map(w => w.key);
+    try {
+      const storedStats = JSON.parse(localStorage.getItem(STATS_STORAGE_KEY) || "{}");
+      if (storedStats && typeof storedStats === "object") setStatsByList(storedStats);
+      const lastList = localStorage.getItem(LAST_LIST_KEY);
+      if (lastList && WORD_LISTS.some((list) => list.id === lastList)) setSelectedListId(lastList);
+    } catch {
+      setStatsByList({});
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(statsByList));
+  }, [statsByList]);
+
+  useEffect(() => {
+    if (selectedListId) localStorage.setItem(LAST_LIST_KEY, selectedListId);
+  }, [selectedListId]);
+
+  const selectedList = useMemo(
+    () => WORD_LISTS.find((list) => list.id === selectedListId) || WORD_LISTS[0],
+    [selectedListId]
+  );
+  const words = selectedList.words;
+  const maxRound = Math.min(8, words.length);
+
+  useEffect(() => {
+    if (roundSize > maxRound) setRoundSize(maxRound);
+  }, [roundSize, maxRound]);
+
+  const startRound = () => {
+    const keys = shuffle(words)
+      .slice(0, Math.min(roundSize, words.length))
+      .map((w) => w.key);
     setCurrentKeys(keys);
     setCompleted([]);
-    setSelection({ word: null, sound: null, image: null });
-  }, [words, roundSize]);
+    setSelection(emptySelection());
+  };
 
-  const pool = useMemo(() => words.filter(w => currentKeys.includes(w.key)), [words, currentKeys]);
+  useEffect(() => {
+    if (!showStart) startRound();
+  }, [selectedListId, roundSize, showStart]);
 
-  const cols = useMemo(() => ({
-    word: shuffle(pool),
-    sound: shuffle(pool),
-    image: shuffle(pool),
-  }), [pool]);
-
+  const pool = useMemo(() => words.filter((w) => currentKeys.includes(w.key)), [words, currentKeys]);
+  const cols = useMemo(
+    () => ({
+      word: shuffle(pool),
+      sound: shuffle(pool),
+      image: shuffle(pool),
+    }),
+    [pool]
+  );
   const allDone = completed.length === currentKeys.length && currentKeys.length > 0;
+
+  const markStat = (wordKey, type) => {
+    setStatsByList((prev) => {
+      const listStats = prev[selectedList.id] || {};
+      const entry = listStats[wordKey] || { ok: 0, ko: 0 };
+      const nextEntry = { ...entry, [type]: entry[type] + 1 };
+      return {
+        ...prev,
+        [selectedList.id]: { ...listStats, [wordKey]: nextEntry },
+      };
+    });
+  };
 
   useEffect(() => {
     const { word, sound, image } = selection;
     if (!word || !sound || !image) return;
     if (word === sound && word === image) {
       if (!completed.includes(word)) {
-        setCompleted(c => [...c, word]);
+        setCompleted((c) => [...c, word]);
+        markStat(word, "ok");
       }
-      setSelection({ word: null, sound: null, image: null });
+      setSelection(emptySelection());
       success();
     } else {
-      setSelection({ word: null, sound: null, image: null });
+      [word, sound, image].forEach((item) => item && markStat(item, "ko"));
+      setSelection(emptySelection());
       error();
     }
   }, [selection]);
@@ -172,11 +198,20 @@ export default function App() {
     }
   }, [allDone]);
 
-  const nextRound = () => {
-    const keys = shuffle(words).slice(0, roundSize).map(w => w.key);
-    setCurrentKeys(keys);
-    setCompleted([]);
-    setSelection({ word: null, sound: null, image: null });
+  const statsRows = useMemo(() => {
+    const listStats = statsByList[selectedList.id] || {};
+    return words
+      .map((word) => ({
+        key: word.key,
+        emoji: word.emoji,
+        ok: listStats[word.key]?.ok || 0,
+        ko: listStats[word.key]?.ko || 0,
+      }))
+      .sort((a, b) => b.ko - a.ko || b.ok - a.ok || a.key.localeCompare(b.key));
+  }, [statsByList, selectedList.id, words]);
+
+  const resetStats = () => {
+    setStatsByList((prev) => ({ ...prev, [selectedList.id]: {} }));
   };
 
   const Card = ({ type, item }) => {
@@ -185,10 +220,8 @@ export default function App() {
 
     const handleClick = () => {
       if (isDone) return;
-      setSelection(prev => ({ ...prev, [type]: prev[type] === item.key ? null : item.key }));
-      if (type === "sound") {
-        speak(item.key);
-      }
+      setSelection((prev) => ({ ...prev, [type]: prev[type] === item.key ? null : item.key }));
+      if (type === "sound") speak(item.key);
     };
 
     return (
@@ -234,11 +267,20 @@ export default function App() {
         <div className="flex items-center gap-3">
           <span className="text-3xl">📚</span>
           <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Joc de paraules</h1>
+          <Pill>{selectedList.name}</Pill>
         </div>
         <div className="flex items-center gap-2 md:gap-3">
-          <Pill>{completed.length}/{currentKeys.length}</Pill>
+          <Pill>
+            {completed.length}/{currentKeys.length}
+          </Pill>
           <button
-            onClick={nextRound}
+            onClick={() => setShowStats(true)}
+            className="px-3 py-2 md:px-4 md:py-2 rounded-xl bg-slate-700 text-white font-semibold shadow active:scale-95"
+          >
+            📊 Menú
+          </button>
+          <button
+            onClick={startRound}
             className="px-3 py-2 md:px-4 md:py-2 rounded-xl bg-indigo-600 text-white font-semibold shadow active:scale-95"
           >
             Nova ronda
@@ -252,13 +294,19 @@ export default function App() {
           Majúscules
         </label>
         <label className="flex items-center gap-2 text-sm">
-          Elements: 
+          Elements:
           <select
             className="bg-white border rounded-lg px-2 py-1"
             value={roundSize}
-            onChange={(e) => setRoundSize(parseInt(e.target.value))}
+            onChange={(e) => setRoundSize(parseInt(e.target.value, 10))}
           >
-            {[4,6,8].map(n => <option key={n} value={n}>{n}</option>)}
+            {[4, 6, 8]
+              .filter((n) => n <= words.length)
+              .map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
           </select>
         </label>
       </div>
@@ -268,7 +316,7 @@ export default function App() {
           <section>
             <h2 className="text-lg font-bold mb-2">Paraula</h2>
             <div className="grid grid-cols-2 sm:grid-cols-1 gap-3">
-              {cols.word.map(item => (
+              {cols.word.map((item) => (
                 <Card key={`word-${item.key}`} type="word" item={item} />
               ))}
             </div>
@@ -277,7 +325,7 @@ export default function App() {
           <section>
             <h2 className="text-lg font-bold mb-2">So</h2>
             <div className="grid grid-cols-2 sm:grid-cols-1 gap-3">
-              {cols.sound.map(item => (
+              {cols.sound.map((item) => (
                 <Card key={`sound-${item.key}`} type="sound" item={item} />
               ))}
             </div>
@@ -286,7 +334,7 @@ export default function App() {
           <section>
             <h2 className="text-lg font-bold mb-2">Imatge</h2>
             <div className="grid grid-cols-2 sm:grid-cols-1 gap-3">
-              {cols.image.map(item => (
+              {cols.image.map((item) => (
                 <Card key={`image-${item.key}`} type="image" item={item} />
               ))}
             </div>
@@ -296,8 +344,121 @@ export default function App() {
 
       <footer className="p-4 md:p-6 flex items-center justify-between text-sm text-slate-600">
         <div>👆 Toca una targeta de cada columna per fer la parella de 3. Toca 🔊 per escoltar.</div>
-        <button onClick={() => window.location.reload()} className="underline">Reinicia</button>
+        <button onClick={() => setShowStart(true)} className="underline">
+          Canvia llista
+        </button>
       </footer>
+
+      <AnimatePresence>
+        {showStart && (
+          <motion.div
+            className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl"
+            >
+              <h2 className="text-2xl font-bold mb-3">Tria la llista de paraules</h2>
+              <div className="space-y-2">
+                {WORD_LISTS.map((list) => (
+                  <button
+                    key={list.id}
+                    onClick={() => setSelectedListId(list.id)}
+                    className={`w-full text-left rounded-xl px-4 py-3 border ${
+                      selectedListId === list.id
+                        ? "border-indigo-600 bg-indigo-50"
+                        : "border-slate-200 hover:border-indigo-400"
+                    }`}
+                  >
+                    <div className="font-semibold">{list.name}</div>
+                    <div className="text-sm text-slate-600">{list.words.length} paraules</div>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setShowStart(false)}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold disabled:opacity-50"
+                  disabled={!selectedListId}
+                >
+                  Comença
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showStats && (
+          <motion.div
+            className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowStats(false)}
+          >
+            <motion.div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xl bg-white rounded-3xl p-6 shadow-2xl"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+            >
+              <h2 className="text-2xl font-bold mb-1">Estadístiques locals</h2>
+              <p className="text-sm text-slate-600 mb-4">
+                Guardades al navegador per la llista <strong>{selectedList.name}</strong>.
+              </p>
+              <div className="max-h-80 overflow-auto border rounded-xl">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-100 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2">Paraula</th>
+                      <th className="text-right px-3 py-2">OK</th>
+                      <th className="text-right px-3 py-2">KO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statsRows.map((row) => (
+                      <tr key={row.key} className="border-t">
+                        <td className="px-3 py-2">
+                          {row.emoji} {row.key}
+                        </td>
+                        <td className="px-3 py-2 text-right">{row.ok}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{row.ko}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 justify-between">
+                <button onClick={resetStats} className="px-3 py-2 rounded-lg border border-red-300 text-red-700">
+                  Reinicia estadístiques
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowStats(false);
+                      setShowStart(true);
+                    }}
+                    className="px-3 py-2 rounded-lg border"
+                  >
+                    Canviar llista
+                  </button>
+                  <button onClick={() => setShowStats(false)} className="px-3 py-2 rounded-lg bg-slate-900 text-white">
+                    Tanca
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {celebrate && (
@@ -319,7 +480,6 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-
       <style>{`
         html, body, #root { height: 100%; }
         body {
@@ -334,10 +494,6 @@ export default function App() {
           -webkit-touch-callout: none;
           -webkit-tap-highlight-color: transparent;
           touch-action: manipulation;
-        }
-        button, a {
-          -webkit-user-drag: none;
-          -webkit-touch-callout: none;
         }
       `}</style>
     </div>

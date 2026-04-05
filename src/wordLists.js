@@ -89,6 +89,9 @@ export const WORD_LISTS = [
       { key: "paper", emoji: "📄" },
       { key: "llapis", emoji: "✏️" },
       { key: "piano", emoji: "🎹" },
+      { key: "ou", emoji: "🥚" },
+      { key: "pingüí", emoji: "🐧" },
+      { key: "mitjó", emoji: "🧦" },
     ],
   },
 ];

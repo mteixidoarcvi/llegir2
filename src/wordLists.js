@@ -92,6 +92,9 @@ export const WORD_LISTS = [
       { key: "ou", emoji: "🥚" },
       { key: "pingüí", emoji: "🐧" },
       { key: "mitjó", emoji: "🧦" },
+      { key: "foca", emoji: "🦭" },
+      { key: "espelma", emoji: "🕯️" },
+      { key: "lletres", emoji: "🔤" },
     ],
   },
 ];

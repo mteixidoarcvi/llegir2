@@ -1,0 +1,42 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  # Lets you redeploy by hand from the Actions tab without pushing a commit.
+  workflow_dispatch:
+
+# Pages serves the gh-pages branch, so the token needs to push to it.
+permissions:
+  contents: write
+
+# Never let two deploys race to publish gh-pages. Queue rather than cancel:
+# interrupting a run mid-push could leave the branch half-written.
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Fail before publishing rather than after, so a broken build never
+      # reaches the site.
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+
+      - name: Publish to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npx gh-pages -d dist --dotfiles

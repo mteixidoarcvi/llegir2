@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test",
+    "audio": "node scripts/generate-audio.mjs",
     "preview": "vite preview",
     "deploy": "gh-pages -d dist",
     "predeploy": "npm run build"

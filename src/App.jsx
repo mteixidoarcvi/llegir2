@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { WORD_LISTS } from "./wordLists";
 import { restartSpeech } from "./speech";
+import audioManifest from "./audioManifest.json";
 
 const STATS_STORAGE_KEY = "llegir2-stats-v1";
 const LAST_LIST_KEY = "llegir2-last-list";
@@ -48,6 +49,7 @@ function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
   const [voice, setVoice] = useState(null);
   const utteranceRef = useRef(null);
   const restartTimerRef = useRef(null);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
@@ -75,10 +77,11 @@ function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
 
   useEffect(() => () => {
     clearTimeout(restartTimerRef.current);
+    audioRef.current?.pause();
     window.speechSynthesis?.cancel();
   }, []);
 
-  const speak = (text) => {
+  const speakWithSynth = (text) => {
     if (!("speechSynthesis" in window)) return;
     const synth = window.speechSynthesis;
     const utter = new SpeechSynthesisUtterance(text);
@@ -99,10 +102,39 @@ function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
       if (utteranceRef.current === utter) utteranceRef.current = null;
     };
     utter.onend = releaseUtterance;
-    utter.onerror = releaseUtterance;
+    utter.onerror = (event) => {
+      console.warn(`speechSynthesis failed for "${text}":`, event.error);
+      releaseUtterance();
+    };
 
     clearTimeout(restartTimerRef.current);
     restartTimerRef.current = restartSpeech(synth, utter);
+  };
+
+  /**
+   * Pre-rendered clips are the primary source: they always sound like Catalan,
+   * whatever voices the device has installed. The synthesiser is only a fallback
+   * for words added since the last `npm run audio`.
+   */
+  const speak = (text) => {
+    const file = audioManifest[text];
+    if (!file) {
+      speakWithSynth(text);
+      return;
+    }
+
+    const previous = audioRef.current;
+    if (previous) {
+      previous.pause();
+      previous.currentTime = 0;
+    }
+
+    const audio = new Audio(`${import.meta.env.BASE_URL}audio/${file}`);
+    audioRef.current = audio;
+    audio.play()?.catch((err) => {
+      console.warn(`clip playback failed for "${text}":`, err);
+      speakWithSynth(text);
+    });
   };
 
   return { speak };

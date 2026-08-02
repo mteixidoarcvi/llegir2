@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { WORD_LISTS } from "./wordLists";
+import { restartSpeech } from "./speech";
 
 const STATS_STORAGE_KEY = "llegir2-stats-v1";
 const LAST_LIST_KEY = "llegir2-last-list";
@@ -45,6 +46,8 @@ function useBeeps() {
 
 function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
   const [voice, setVoice] = useState(null);
+  const utteranceRef = useRef(null);
+  const restartTimerRef = useRef(null);
 
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
@@ -70,6 +73,11 @@ function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
     };
   }, [preferredLangs.join("|")]);
 
+  useEffect(() => () => {
+    clearTimeout(restartTimerRef.current);
+    window.speechSynthesis?.cancel();
+  }, []);
+
   const speak = (text) => {
     if (!("speechSynthesis" in window)) return;
     const synth = window.speechSynthesis;
@@ -83,8 +91,18 @@ function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
     }
     utter.rate = 0.9;
     utter.pitch = 1.0;
-    synth.cancel();
-    synth.speak(utter);
+
+    // Keep a strong reference until Chrome reports that playback finished.
+    // Some mobile implementations otherwise garbage-collect the utterance.
+    utteranceRef.current = utter;
+    const releaseUtterance = () => {
+      if (utteranceRef.current === utter) utteranceRef.current = null;
+    };
+    utter.onend = releaseUtterance;
+    utter.onerror = releaseUtterance;
+
+    clearTimeout(restartTimerRef.current);
+    restartTimerRef.current = restartSpeech(synth, utter);
   };
 
   return { speak };

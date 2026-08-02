@@ -35,8 +35,14 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+      # gh-pages clones the remote into its own cache directory, so it does not
+      # inherit the credentials actions/checkout persists — pass the token in
+      # the remote URL. Actions masks it in the logs.
       - name: Publish to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          npx gh-pages -d dist --dotfiles
+          npx gh-pages -d dist --dotfiles \
+            -r "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"

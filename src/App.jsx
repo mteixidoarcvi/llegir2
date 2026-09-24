@@ -1,551 +1,293 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
-// eslint-disable-next-line no-unused-vars
-import { motion, AnimatePresence } from "framer-motion";
-import { WORD_LISTS } from "./wordLists";
-import { restartSpeech } from "./speech";
-import audioManifest from "./audioManifest.json";
+import React, { useMemo, useState } from "react";
+import MatchingGame from "./MatchingGame";
 
-const STATS_STORAGE_KEY = "llegir2-stats-v1";
-const LAST_LIST_KEY = "llegir2-last-list";
+const SYLLABLES = [
+  { onset: "M", vowel: "A", syllable: "MA" },
+  { onset: "M", vowel: "E", syllable: "ME" },
+  { onset: "M", vowel: "I", syllable: "MI" },
+  { onset: "M", vowel: "O", syllable: "MO" },
+  { onset: "M", vowel: "U", syllable: "MU" },
+  { onset: "S", vowel: "A", syllable: "SA" },
+  { onset: "S", vowel: "E", syllable: "SE" },
+  { onset: "S", vowel: "I", syllable: "SI" },
+  { onset: "S", vowel: "O", syllable: "SO" },
+  { onset: "S", vowel: "U", syllable: "SU" },
+  { onset: "L", vowel: "A", syllable: "LA" },
+  { onset: "L", vowel: "E", syllable: "LE" },
+  { onset: "L", vowel: "I", syllable: "LI" },
+  { onset: "L", vowel: "O", syllable: "LO" },
+  { onset: "L", vowel: "U", syllable: "LU" },
+  { onset: "F", vowel: "A", syllable: "FA" },
+  { onset: "F", vowel: "E", syllable: "FE" },
+  { onset: "F", vowel: "I", syllable: "FI" },
+  { onset: "F", vowel: "O", syllable: "FO" },
+  { onset: "F", vowel: "U", syllable: "FU" },
+];
 
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
+function shuffle(items) {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [copy[i], copy[j]] = [copy[j], copy[i]];
   }
-  return a;
+  return copy;
 }
 
-function useBeeps() {
-  const ctxRef = useRef(null);
-  const getCtx = () => (ctxRef.current ??= new (window.AudioContext || window.webkitAudioContext)());
-
-  const beep = (freq = 880, ms = 140, type = "sine", vol = 0.05) => {
-    const ctx = getCtx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = type;
-    o.frequency.value = freq;
-    g.gain.value = vol;
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.start();
-    setTimeout(() => o.stop(), ms);
-  };
-
-  const success = () => {
-    beep(880, 120, "sine");
-    setTimeout(() => beep(1320, 120, "sine"), 120);
-  };
-  const error = () => {
-    beep(200, 180, "square");
-    setTimeout(() => beep(160, 220, "square"), 180);
-  };
-  return { success, error };
+function speak(text, rate = 0.72) {
+  if (!("speechSynthesis" in window)) return;
+  const synth = window.speechSynthesis;
+  const utter = new SpeechSynthesisUtterance(text.toLowerCase());
+  const voices = synth.getVoices?.() || [];
+  const voice =
+    voices.find((v) => v.lang?.toLowerCase().startsWith("ca")) ||
+    voices.find((v) => v.lang?.toLowerCase().startsWith("es"));
+  if (voice) {
+    utter.voice = voice;
+    utter.lang = voice.lang;
+  } else {
+    utter.lang = "ca-ES";
+  }
+  utter.rate = rate;
+  synth.cancel();
+  synth.speak(utter);
 }
 
-function useSpeech(preferredLangs = ["ca-ES", "ca", "es-ES", "es"]) {
-  const [voice, setVoice] = useState(null);
-  const utteranceRef = useRef(null);
-  const restartTimerRef = useRef(null);
-  const audioRef = useRef(null);
+function ModePicker({ onSelect }) {
+  const modes = [
+    {
+      id: "blend",
+      icon: "🧲",
+      title: "Ajunta els sons",
+      subtitle: "M + A → MA",
+      description: "Arrossega mentalment els sons fins que quedin enganxats.",
+    },
+    {
+      id: "choose",
+      icon: "👂",
+      title: "Escolta i tria",
+      subtitle: "🔊 → MA / MO / SA",
+      description: "Escolta una síl·laba i troba com s'escriu.",
+    },
+    {
+      id: "matching",
+      icon: "🧩",
+      title: "Paraula, so i imatge",
+      subtitle: "El joc original",
+      description: "Relaciona la paraula escrita, el so i la imatge.",
+    },
+  ];
 
-  useEffect(() => {
-    if (!("speechSynthesis" in window)) return;
-    const synth = window.speechSynthesis;
+  return (
+    <main className="min-h-screen bg-gradient-to-b from-sky-50 to-indigo-50 p-5 flex items-center justify-center">
+      <div className="w-full max-w-3xl">
+        <div className="text-center mb-7">
+          <div className="text-5xl mb-2">📚</div>
+          <h1 className="text-3xl font-extrabold">Aprenem a llegir</h1>
+          <p className="text-slate-600 mt-2">Avui, què vols practicar?</p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-4">
+          {modes.map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => onSelect(mode.id)}
+              className="bg-white rounded-3xl p-6 shadow border text-left active:scale-[0.98]"
+            >
+              <div className="text-5xl mb-4">{mode.icon}</div>
+              <div className="text-xl font-extrabold">{mode.title}</div>
+              <div className="text-indigo-700 font-bold mt-1">{mode.subtitle}</div>
+              <p className="text-sm text-slate-600 mt-3">{mode.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
 
-    const pickVoice = () => {
-      const list = synth.getVoices?.() || [];
-      if (!list.length) return;
-      const chosen = preferredLangs
-        .map((pl) => list.find((v) => v.lang?.toLowerCase().startsWith(pl.toLowerCase())))
-        .find(Boolean) || list[0];
-      setVoice(chosen || null);
-    };
+function GameHeader({ title, onHome }) {
+  return (
+    <header className="p-4 flex items-center justify-between">
+      <button onClick={onHome} className="px-3 py-2 rounded-xl bg-white shadow border">
+        ← Jocs
+      </button>
+      <h1 className="font-extrabold text-lg">{title}</h1>
+      <div className="w-20" />
+    </header>
+  );
+}
 
-    pickVoice();
-    const handler = () => pickVoice();
-    synth.addEventListener?.("voiceschanged", handler);
-    synth.onvoiceschanged = handler;
+function BlendGame({ onHome }) {
+  const [index, setIndex] = useState(0);
+  const [joined, setJoined] = useState(false);
+  const current = SYLLABLES[index % SYLLABLES.length];
 
-    return () => {
-      synth.removeEventListener?.("voiceschanged", handler);
-      if (synth.onvoiceschanged === handler) synth.onvoiceschanged = null;
-    };
-  }, [preferredLangs.join("|")]);
+  const next = () => {
+    setJoined(false);
+    setIndex((value) => (value + 1) % SYLLABLES.length);
+  };
 
-  useEffect(() => () => {
-    clearTimeout(restartTimerRef.current);
-    audioRef.current?.pause();
-    window.speechSynthesis?.cancel();
-  }, []);
+  const playParts = () => {
+    speak(current.onset, 0.55);
+    setTimeout(() => speak(current.vowel, 0.65), 700);
+  };
 
-  const speakWithSynth = (text) => {
-    if (!("speechSynthesis" in window)) return;
-    const synth = window.speechSynthesis;
-    const utter = new SpeechSynthesisUtterance(text);
+  const join = () => {
+    setJoined(true);
+    setTimeout(() => speak(current.syllable, 0.68), 250);
+  };
 
-    if (voice) {
-      utter.voice = voice;
-      utter.lang = voice.lang;
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50">
+      <GameHeader title="Ajunta els sons" onHome={onHome} />
+      <main className="max-w-2xl mx-auto px-5 py-8 text-center">
+        <p className="text-slate-600 mb-8">Escolta els dos sons. Després ajunta'ls sense fer pausa.</p>
+
+        <div className="flex items-center justify-center gap-8 md:gap-16 mb-8">
+          <button
+            onClick={() => speak(current.onset, 0.55)}
+            className="w-32 h-32 rounded-3xl bg-white shadow-lg border text-7xl font-black active:scale-95"
+          >
+            {current.onset}
+          </button>
+          <div className="text-4xl text-slate-400">+</div>
+          <button
+            onClick={() => speak(current.vowel, 0.65)}
+            className="w-32 h-32 rounded-3xl bg-white shadow-lg border text-7xl font-black active:scale-95"
+          >
+            {current.vowel}
+          </button>
+        </div>
+
+        <button onClick={playParts} className="px-5 py-3 rounded-2xl bg-white shadow border font-bold mb-6">
+          🔊 Escolta'ls separats
+        </button>
+
+        <div className="relative h-36 flex items-center justify-center">
+          <div
+            className={`absolute text-7xl font-black transition-all duration-700 ${
+              joined ? "-translate-x-6" : "-translate-x-28"
+            }`}
+          >
+            {current.onset}
+          </div>
+          <div
+            className={`absolute text-7xl font-black transition-all duration-700 ${
+              joined ? "translate-x-6" : "translate-x-28"
+            }`}
+          >
+            {current.vowel}
+          </div>
+        </div>
+
+        {!joined ? (
+          <button
+            onClick={join}
+            className="w-full max-w-sm px-6 py-4 rounded-2xl bg-indigo-600 text-white text-xl font-extrabold shadow active:scale-95"
+          >
+            🧲 AJUNTA'LS
+          </button>
+        ) : (
+          <div>
+            <button
+              onClick={() => speak(current.syllable, 0.68)}
+              className="text-8xl font-black tracking-wide bg-white rounded-3xl px-10 py-6 shadow-lg border"
+            >
+              {current.syllable}
+            </button>
+            <p className="mt-4 font-semibold">Digues-ho tu també!</p>
+            <button
+              onClick={next}
+              className="mt-7 px-7 py-4 rounded-2xl bg-emerald-600 text-white text-xl font-bold shadow"
+            >
+              Següent →
+            </button>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function ChooseGame({ onHome }) {
+  const [round, setRound] = useState(0);
+  const [feedback, setFeedback] = useState(null);
+
+  const question = useMemo(() => {
+    const target = SYLLABLES[round % SYLLABLES.length];
+    const sameVowel = SYLLABLES.filter(
+      (s) => s.vowel === target.vowel && s.syllable !== target.syllable
+    );
+    const sameOnset = SYLLABLES.filter(
+      (s) => s.onset === target.onset && s.syllable !== target.syllable
+    );
+    const distractors = shuffle([...sameVowel.slice(0, 2), ...sameOnset.slice(0, 2)])
+      .filter((item, i, arr) => arr.findIndex((x) => x.syllable === item.syllable) === i)
+      .slice(0, 2);
+    return { target, options: shuffle([target, ...distractors]) };
+  }, [round]);
+
+  const answer = (syllable) => {
+    if (syllable === question.target.syllable) {
+      setFeedback("ok");
+      speak(question.target.syllable, 0.7);
+      setTimeout(() => {
+        setFeedback(null);
+        setRound((value) => value + 1);
+      }, 850);
     } else {
-      utter.lang = preferredLangs[0];
+      setFeedback("ko");
+      setTimeout(() => setFeedback(null), 600);
     }
-    utter.rate = 0.9;
-    utter.pitch = 1.0;
-
-    // Keep a strong reference until Chrome reports that playback finished.
-    // Some mobile implementations otherwise garbage-collect the utterance.
-    utteranceRef.current = utter;
-    const releaseUtterance = () => {
-      if (utteranceRef.current === utter) utteranceRef.current = null;
-    };
-    utter.onend = releaseUtterance;
-    utter.onerror = (event) => {
-      console.warn(`speechSynthesis failed for "${text}":`, event.error);
-      releaseUtterance();
-    };
-
-    clearTimeout(restartTimerRef.current);
-    restartTimerRef.current = restartSpeech(synth, utter);
   };
 
-  /**
-   * Pre-rendered clips are the primary source: they always sound like Catalan,
-   * whatever voices the device has installed. The synthesiser is only a fallback
-   * for words added since the last `npm run audio`.
-   */
-  const speak = (text) => {
-    const file = audioManifest[text];
-    if (!file) {
-      speakWithSynth(text);
-      return;
-    }
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-cyan-50">
+      <GameHeader title="Escolta i tria" onHome={onHome} />
+      <main className="max-w-2xl mx-auto p-5 text-center">
+        <p className="text-slate-600 mt-6">Escolta. Quina síl·laba has sentit?</p>
+        <button
+          onClick={() => speak(question.target.syllable, 0.62)}
+          className="mt-8 w-40 h-40 rounded-full bg-white shadow-xl border text-7xl active:scale-95"
+        >
+          🔊
+        </button>
 
-    const previous = audioRef.current;
-    if (previous) {
-      previous.pause();
-      previous.currentTime = 0;
-    }
+        <div className="grid grid-cols-3 gap-3 mt-10">
+          {question.options.map((option) => (
+            <button
+              key={option.syllable}
+              onClick={() => answer(option.syllable)}
+              className="bg-white rounded-3xl py-8 text-4xl md:text-5xl font-black shadow border active:scale-95"
+            >
+              {option.syllable}
+            </button>
+          ))}
+        </div>
 
-    const audio = new Audio(`${import.meta.env.BASE_URL}audio/${file}`);
-    audioRef.current = audio;
-    audio.play()?.catch((err) => {
-      console.warn(`clip playback failed for "${text}":`, err);
-      speakWithSynth(text);
-    });
-  };
-
-  return { speak };
-}
-
-function emptySelection() {
-  return { word: null, sound: null, image: null };
+        <div className="h-24 flex items-center justify-center">
+          {feedback === "ok" && <div className="text-5xl">🎉 Molt bé!</div>}
+          {feedback === "ko" && <div className="text-4xl">👂 Torna-ho a escoltar</div>}
+        </div>
+      </main>
+    </div>
+  );
 }
 
 export default function App() {
-  const [selectedListId, setSelectedListId] = useState(null);
-  const [showStart, setShowStart] = useState(true);
-  const [showStats, setShowStats] = useState(false);
-  const [uppercase, setUppercase] = useState(true);
-  const [roundSize, setRoundSize] = useState(4);
-  const [currentKeys, setCurrentKeys] = useState([]);
-  const [completed, setCompleted] = useState([]);
-  const [selection, setSelection] = useState(emptySelection());
-  const [celebrate, setCelebrate] = useState(false);
-  const [statsByList, setStatsByList] = useState({});
-  const { success, error } = useBeeps();
-  const { speak } = useSpeech();
+  const [mode, setMode] = useState(null);
 
-  useEffect(() => {
-    try {
-      const storedStats = JSON.parse(localStorage.getItem(STATS_STORAGE_KEY) || "{}");
-      if (storedStats && typeof storedStats === "object") setStatsByList(storedStats);
-      const lastList = localStorage.getItem(LAST_LIST_KEY);
-      if (lastList && WORD_LISTS.some((list) => list.id === lastList)) setSelectedListId(lastList);
-    } catch {
-      setStatsByList({});
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(statsByList));
-  }, [statsByList]);
-
-  useEffect(() => {
-    if (selectedListId) localStorage.setItem(LAST_LIST_KEY, selectedListId);
-  }, [selectedListId]);
-
-  const selectedList = useMemo(
-    () => WORD_LISTS.find((list) => list.id === selectedListId) || WORD_LISTS[0],
-    [selectedListId]
-  );
-  const words = selectedList.words;
-  const maxRound = Math.min(8, words.length);
-
-  useEffect(() => {
-    if (roundSize > maxRound) setRoundSize(maxRound);
-  }, [roundSize, maxRound]);
-
-  const startRound = () => {
-    const keys = shuffle(words)
-      .slice(0, Math.min(roundSize, words.length))
-      .map((w) => w.key);
-    setCurrentKeys(keys);
-    setCompleted([]);
-    setSelection(emptySelection());
-  };
-
-  useEffect(() => {
-    if (!showStart) startRound();
-  }, [selectedListId, roundSize, showStart]);
-
-  const pool = useMemo(() => words.filter((w) => currentKeys.includes(w.key)), [words, currentKeys]);
-  const cols = useMemo(
-    () => ({
-      word: shuffle(pool),
-      sound: shuffle(pool),
-      image: shuffle(pool),
-    }),
-    [pool]
-  );
-  const allDone = completed.length === currentKeys.length && currentKeys.length > 0;
-
-  const markStat = (wordKey, type) => {
-    setStatsByList((prev) => {
-      const listStats = prev[selectedList.id] || {};
-      const entry = listStats[wordKey] || { ok: 0, ko: 0 };
-      const nextEntry = { ...entry, [type]: entry[type] + 1 };
-      return {
-        ...prev,
-        [selectedList.id]: { ...listStats, [wordKey]: nextEntry },
-      };
-    });
-  };
-
-  useEffect(() => {
-    const { word, sound, image } = selection;
-    if (!word || !sound || !image) return;
-    if (word === sound && word === image) {
-      if (!completed.includes(word)) {
-        setCompleted((c) => [...c, word]);
-        markStat(word, "ok");
-      }
-      setSelection(emptySelection());
-      success();
-    } else {
-      [word, sound, image].forEach((item) => item && markStat(item, "ko"));
-      setSelection(emptySelection());
-      error();
-    }
-  }, [selection]);
-
-  useEffect(() => {
-    if (allDone) {
-      setCelebrate(true);
-      setTimeout(() => setCelebrate(false), 1800);
-    }
-  }, [allDone]);
-
-  const statsRows = useMemo(() => {
-    const listStats = statsByList[selectedList.id] || {};
-    return words
-      .map((word) => ({
-        key: word.key,
-        emoji: word.emoji,
-        ok: listStats[word.key]?.ok || 0,
-        ko: listStats[word.key]?.ko || 0,
-      }))
-      .sort((a, b) => b.ko - a.ko || b.ok - a.ok || a.key.localeCompare(b.key));
-  }, [statsByList, selectedList.id, words]);
-
-  const resetStats = () => {
-    setStatsByList((prev) => ({ ...prev, [selectedList.id]: {} }));
-  };
-
-  const Card = ({ type, item }) => {
-    const isDone = completed.includes(item.key);
-    const isSelected = selection[type] === item.key;
-
-    const handleClick = () => {
-      if (isDone) return;
-      setSelection((prev) => ({ ...prev, [type]: prev[type] === item.key ? null : item.key }));
-      if (type === "sound") speak(item.key);
-    };
-
-    return (
-      <motion.button
-        layout
-        onClick={handleClick}
-        className={`w-full p-4 md:p-5 rounded-2xl shadow ${
-          isDone ? "bg-green-100" : isSelected ? "ring-4 ring-blue-400 bg-white" : "bg-white"
-        } text-center active:scale-[0.98]`}
-        whileTap={{ scale: 0.98 }}
-        animate={isSelected ? { scale: 1.03 } : { scale: 1 }}
-        transition={{ type: "spring", stiffness: 300, damping: 15 }}
-        aria-label={`${type} ${item.key}`}
-      >
-        {type === "word" && (
-          <div className="text-3xl md:text-4xl font-bold tracking-widest text-black">
-            {uppercase ? item.key.toUpperCase() : item.key}
-          </div>
-        )}
-        {type === "sound" && (
-          <div className="flex items-center justify-center">
-            <span className="text-3xl">🔊</span>
-          </div>
-        )}
-        {type === "image" && (
-          <div className="text-4xl md:text-5xl" aria-hidden>
-            {item.emoji}
-          </div>
-        )}
-      </motion.button>
-    );
-  };
-
-  const Pill = ({ children }) => (
-    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 border border-slate-200">
-      {children}
-    </span>
-  );
-
+  if (!mode) return <ModePicker onSelect={setMode} />;
+  if (mode === "blend") return <BlendGame onHome={() => setMode(null)} />;
+  if (mode === "choose") return <ChooseGame onHome={() => setMode(null)} />;
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-sky-50 to-indigo-50 flex flex-col">
-      <header className="p-4 md:p-6 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <span className="text-3xl">📚</span>
-          <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Joc de paraules</h1>
-          <Pill>{selectedList.name}</Pill>
-        </div>
-        <div className="flex items-center gap-2 md:gap-3">
-          <Pill>
-            {completed.length}/{currentKeys.length}
-          </Pill>
-          <button
-            onClick={() => setShowStats(true)}
-            className="px-3 py-2 md:px-4 md:py-2 rounded-xl bg-slate-700 text-white font-semibold shadow active:scale-95"
-          >
-            📊 Menú
-          </button>
-          <button
-            onClick={startRound}
-            className="px-3 py-2 md:px-4 md:py-2 rounded-xl bg-indigo-600 text-white font-semibold shadow active:scale-95"
-          >
-            Nova ronda
-          </button>
-        </div>
-      </header>
-
-      <div className="px-4 md:px-6 pb-2 flex items-center gap-3">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={uppercase} onChange={(e) => setUppercase(e.target.checked)} />
-          Majúscules
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          Elements:
-          <select
-            className="bg-white border rounded-lg px-2 py-1"
-            value={roundSize}
-            onChange={(e) => setRoundSize(parseInt(e.target.value, 10))}
-          >
-            {[4, 6, 8]
-              .filter((n) => n <= words.length)
-              .map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-          </select>
-        </label>
-      </div>
-
-      <main className="flex-1 px-4 md:px-6 pb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
-          <section>
-            <h2 className="text-lg font-bold mb-2">Paraula</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-1 gap-3">
-              {cols.word.map((item) => (
-                <Card key={`word-${item.key}`} type="word" item={item} />
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-bold mb-2">So</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-1 gap-3">
-              {cols.sound.map((item) => (
-                <Card key={`sound-${item.key}`} type="sound" item={item} />
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-bold mb-2">Imatge</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-1 gap-3">
-              {cols.image.map((item) => (
-                <Card key={`image-${item.key}`} type="image" item={item} />
-              ))}
-            </div>
-          </section>
-        </div>
-      </main>
-
-      <footer className="p-4 md:p-6 flex items-center justify-between text-sm text-slate-600">
-        <div>👆 Toca una targeta de cada columna per fer la parella de 3. Toca 🔊 per escoltar.</div>
-        <button onClick={() => setShowStart(true)} className="underline">
-          Canvia llista
-        </button>
-      </footer>
-
-      <AnimatePresence>
-        {showStart && (
-          <motion.div
-            className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 20, opacity: 0 }}
-              className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl"
-            >
-              <h2 className="text-2xl font-bold mb-3">Tria la llista de paraules</h2>
-              <div className="space-y-2">
-                {WORD_LISTS.map((list) => (
-                  <button
-                    key={list.id}
-                    onClick={() => setSelectedListId(list.id)}
-                    className={`w-full text-left rounded-xl px-4 py-3 border ${
-                      selectedListId === list.id
-                        ? "border-indigo-600 bg-indigo-50"
-                        : "border-slate-200 hover:border-indigo-400"
-                    }`}
-                  >
-                    <div className="font-semibold">{list.name}</div>
-                    <div className="text-sm text-slate-600">{list.words.length} paraules</div>
-                  </button>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => setShowStart(false)}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold disabled:opacity-50"
-                  disabled={!selectedListId}
-                >
-                  Comença
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showStats && (
-          <motion.div
-            className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowStats(false)}
-          >
-            <motion.div
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-xl bg-white rounded-3xl p-6 shadow-2xl"
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 20, opacity: 0 }}
-            >
-              <h2 className="text-2xl font-bold mb-1">Estadístiques locals</h2>
-              <p className="text-sm text-slate-600 mb-4">
-                Guardades al navegador per la llista <strong>{selectedList.name}</strong>.
-              </p>
-              <div className="max-h-80 overflow-auto border rounded-xl">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-100 sticky top-0">
-                    <tr>
-                      <th className="text-left px-3 py-2">Paraula</th>
-                      <th className="text-right px-3 py-2">OK</th>
-                      <th className="text-right px-3 py-2">KO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {statsRows.map((row) => (
-                      <tr key={row.key} className="border-t">
-                        <td className="px-3 py-2">
-                          {row.emoji} {row.key}
-                        </td>
-                        <td className="px-3 py-2 text-right">{row.ok}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{row.ko}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2 justify-between">
-                <button onClick={resetStats} className="px-3 py-2 rounded-lg border border-red-300 text-red-700">
-                  Reinicia estadístiques
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setShowStats(false);
-                      setShowStart(true);
-                    }}
-                    className="px-3 py-2 rounded-lg border"
-                  >
-                    Canviar llista
-                  </button>
-                  <button onClick={() => setShowStats(false)} className="px-3 py-2 rounded-lg bg-slate-900 text-white">
-                    Tanca
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {celebrate && (
-          <motion.div
-            className="fixed inset-0 pointer-events-none flex items-center justify-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1.1 }}
-              exit={{ scale: 0.8 }}
-              className="bg-white/80 backdrop-blur-md rounded-3xl px-6 py-4 shadow-2xl border"
-            >
-              <div className="text-4xl">🎉</div>
-              <div className="text-xl font-bold">Molt bé!</div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <style>{`
-        html, body, #root { height: 100%; }
-        body {
-          color: black;
-          touch-action: manipulation;
-        }
-        * {
-          -webkit-user-select: none;
-          -moz-user-select: none;
-          -ms-user-select: none;
-          user-select: none;
-          -webkit-touch-callout: none;
-          -webkit-tap-highlight-color: transparent;
-          touch-action: manipulation;
-        }
-      `}</style>
+    <div>
+      <button
+        onClick={() => setMode(null)}
+        className="fixed z-50 bottom-4 left-4 px-3 py-2 rounded-xl bg-white border shadow font-semibold"
+      >
+        ← Jocs
+      </button>
+      <MatchingGame />
     </div>
   );
 }

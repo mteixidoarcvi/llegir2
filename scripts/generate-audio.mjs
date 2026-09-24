@@ -2,6 +2,9 @@
  * Pre-renders one audio clip per word in src/wordLists.js using Amazon Polly,
  * so playback never depends on the voices a device happens to have installed.
  *
+ * It also renders the syllables and stretched sounds of the blending games
+ * (src/syllables.js), spelled out phonetically so Polly says exactly that sound.
+ *
  * Clips land in public/audio/, and src/audioManifest.json maps each word to its
  * file so the app knows synchronously which clips exist.
  *
@@ -19,7 +22,7 @@ import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const execFileAsync = promisify(execFile);
 
@@ -65,8 +68,13 @@ async function aws(args, outputFile) {
   return stdout;
 }
 
+/** Windows needs a file:// URL for dynamic imports of absolute paths. */
+function sourceUrl(file) {
+  return pathToFileURL(path.join(ROOT, "src", file)).href;
+}
+
 async function uniqueWords() {
-  const { WORD_LISTS } = await import(path.join(ROOT, "src", "wordLists.js"));
+  const { WORD_LISTS } = await import(sourceUrl("wordLists.js"));
   const words = new Set();
   for (const list of WORD_LISTS) {
     for (const word of list.words) words.add(word.key);
@@ -91,17 +99,24 @@ function buildManifest(words) {
   return manifest;
 }
 
-async function synthesize(word, target) {
+async function blendingClips() {
+  const { blendingClips } = await import(sourceUrl("syllables.js"));
+  return blendingClips();
+}
+
+function wordSsml(word) {
   // Neural voices support prosody rate, so SSML is only needed to slow speech.
-  const useSsml = RATE && RATE !== "100%";
-  const text = useSsml
-    ? `<speak><prosody rate="${RATE}">${escapeSsml(word)}</prosody></speak>`
-    : word;
+  if (!RATE || RATE === "100%") return null;
+  return `<speak><prosody rate="${RATE}">${escapeSsml(word)}</prosody></speak>`;
+}
+
+async function synthesize(text, ssml, target) {
+  const useSsml = Boolean(ssml);
 
   await aws(
     [
       "synthesize-speech",
-      "--text", text,
+      "--text", useSsml ? ssml : text,
       "--text-type", useSsml ? "ssml" : "text",
       "--voice-id", VOICE_ID,
       "--engine", ENGINE,
@@ -129,20 +144,24 @@ async function main() {
 
   const words = await uniqueWords();
   const manifest = buildManifest(words);
+  const clips = [
+    ...words.map((word) => ({ key: word, file: manifest[word], ssml: wordSsml(word) })),
+    ...(await blendingClips()),
+  ];
+  for (const clip of clips) manifest[clip.key] = clip.file;
   await mkdir(AUDIO_DIR, { recursive: true });
 
   let generated = 0;
   let skipped = 0;
-  for (const word of words) {
-    const file = manifest[word];
+  for (const { key, file, ssml } of clips) {
     const target = path.join(AUDIO_DIR, file);
     if (!force && existsSync(target)) {
       skipped += 1;
       continue;
     }
-    await synthesize(word, target);
+    await synthesize(key, ssml, target);
     generated += 1;
-    console.log(`  ${word.padEnd(12)} -> audio/${file}`);
+    console.log(`  ${key.padEnd(12)} -> audio/${file}`);
   }
 
   // Drop clips for words that no longer appear in any list.
@@ -156,7 +175,7 @@ async function main() {
   await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
 
   console.log(
-    `\n${words.length} words | ${generated} generated, ${skipped} already present, ${orphans.length} removed`
+    `\n${words.length} words + ${clips.length - words.length} blending clips | ${generated} generated, ${skipped} already present, ${orphans.length} removed`
   );
   console.log(`voice: ${VOICE_ID} (${LANGUAGE_CODE}, ${ENGINE}) at rate ${RATE} in ${REGION}`);
 }

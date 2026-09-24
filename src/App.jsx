@@ -1,28 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import MatchingGame from "./MatchingGame";
-
-const SYLLABLES = [
-  { onset: "M", vowel: "A", syllable: "MA" },
-  { onset: "M", vowel: "E", syllable: "ME" },
-  { onset: "M", vowel: "I", syllable: "MI" },
-  { onset: "M", vowel: "O", syllable: "MO" },
-  { onset: "M", vowel: "U", syllable: "MU" },
-  { onset: "S", vowel: "A", syllable: "SA" },
-  { onset: "S", vowel: "E", syllable: "SE" },
-  { onset: "S", vowel: "I", syllable: "SI" },
-  { onset: "S", vowel: "O", syllable: "SO" },
-  { onset: "S", vowel: "U", syllable: "SU" },
-  { onset: "L", vowel: "A", syllable: "LA" },
-  { onset: "L", vowel: "E", syllable: "LE" },
-  { onset: "L", vowel: "I", syllable: "LI" },
-  { onset: "L", vowel: "O", syllable: "LO" },
-  { onset: "L", vowel: "U", syllable: "LU" },
-  { onset: "F", vowel: "A", syllable: "FA" },
-  { onset: "F", vowel: "E", syllable: "FE" },
-  { onset: "F", vowel: "I", syllable: "FI" },
-  { onset: "F", vowel: "O", syllable: "FO" },
-  { onset: "F", vowel: "U", syllable: "FU" },
-];
+import { SYLLABLES, soundKey, syllableKey } from "./syllables";
+import { useSpeech } from "./useSpeech";
 
 function shuffle(items) {
   const copy = [...items];
@@ -33,23 +12,24 @@ function shuffle(items) {
   return copy;
 }
 
-function speak(text, rate = 0.72) {
-  if (!("speechSynthesis" in window)) return;
-  const synth = window.speechSynthesis;
-  const utter = new SpeechSynthesisUtterance(text.toLowerCase());
-  const voices = synth.getVoices?.() || [];
-  const voice =
-    voices.find((v) => v.lang?.toLowerCase().startsWith("ca")) ||
-    voices.find((v) => v.lang?.toLowerCase().startsWith("es"));
-  if (voice) {
-    utter.voice = voice;
-    utter.lang = voice.lang;
-  } else {
-    utter.lang = "ca-ES";
-  }
-  utter.rate = rate;
-  synth.cancel();
-  synth.speak(utter);
+/** A shuffled pass through every syllable, so none repeats until all have come up. */
+function useSyllableDeck() {
+  const [deck, setDeck] = useState(() => shuffle(SYLLABLES));
+  const [index, setIndex] = useState(0);
+
+  const next = () => {
+    if (index + 1 < deck.length) {
+      setIndex(index + 1);
+      return;
+    }
+    // Avoid the same syllable twice in a row across two passes.
+    let fresh = shuffle(SYLLABLES);
+    if (fresh[0] === deck[index]) fresh = [...fresh.slice(1), fresh[0]];
+    setDeck(fresh);
+    setIndex(0);
+  };
+
+  return { current: deck[index], next, round: `${deck.length}-${index}-${deck[0].syllable}` };
 }
 
 function ModePicker({ onSelect }) {
@@ -117,23 +97,21 @@ function GameHeader({ title, onHome }) {
 }
 
 function BlendGame({ onHome }) {
-  const [index, setIndex] = useState(0);
+  const { current, next: nextSyllable } = useSyllableDeck();
   const [joined, setJoined] = useState(false);
-  const current = SYLLABLES[index % SYLLABLES.length];
+  const { speak, speakSequence } = useSpeech();
 
   const next = () => {
     setJoined(false);
-    setIndex((value) => (value + 1) % SYLLABLES.length);
+    nextSyllable();
   };
 
-  const playParts = () => {
-    speak(current.onset.repeat(6), 0.5);
-    setTimeout(() => speak(current.vowel.repeat(3), 0.6), 700);
-  };
+  const playParts = () => speakSequence([soundKey(current.onset), soundKey(current.vowel)]);
 
+  // Play straight from the tap: mobile browsers may block sound started later.
   const join = () => {
     setJoined(true);
-    setTimeout(() => speak(current.syllable, 0.68), 250);
+    speak(syllableKey(current.syllable));
   };
 
   return (
@@ -144,14 +122,14 @@ function BlendGame({ onHome }) {
 
         <div className="flex items-center justify-center gap-8 md:gap-16 mb-8">
           <button
-            onClick={() => speak(current.onset.repeat(6), 0.5)}
+            onClick={() => speak(soundKey(current.onset))}
             className="w-32 h-32 rounded-3xl bg-white shadow-lg border text-7xl font-black active:scale-95"
           >
             {current.onset}
           </button>
           <div className="text-4xl text-slate-400">+</div>
           <button
-            onClick={() => speak(current.vowel.repeat(3), 0.6)}
+            onClick={() => speak(soundKey(current.vowel))}
             className="w-32 h-32 rounded-3xl bg-white shadow-lg border text-7xl font-black active:scale-95"
           >
             {current.vowel}
@@ -189,7 +167,7 @@ function BlendGame({ onHome }) {
         ) : (
           <div>
             <button
-              onClick={() => speak(current.syllable, 0.68)}
+              onClick={() => speak(syllableKey(current.syllable))}
               className="text-8xl font-black tracking-wide bg-white rounded-3xl px-10 py-6 shadow-lg border"
             >
               {current.syllable}
@@ -209,34 +187,39 @@ function BlendGame({ onHome }) {
 }
 
 function ChooseGame({ onHome }) {
-  const [round, setRound] = useState(0);
+  const { current: target, next, round } = useSyllableDeck();
   const [feedback, setFeedback] = useState(null);
+  const { speak } = useSpeech();
+  const playTarget = () => speak(syllableKey(target.syllable));
 
-  const question = useMemo(() => {
-    const target = SYLLABLES[round % SYLLABLES.length];
-    const sameVowel = SYLLABLES.filter(
-      (s) => s.vowel === target.vowel && s.syllable !== target.syllable
-    );
-    const sameOnset = SYLLABLES.filter(
-      (s) => s.onset === target.onset && s.syllable !== target.syllable
-    );
-    const distractors = shuffle([...sameVowel.slice(0, 2), ...sameOnset.slice(0, 2)])
-      .filter((item, i, arr) => arr.findIndex((x) => x.syllable === item.syllable) === i)
-      .slice(0, 2);
-    return { target, options: shuffle([target, ...distractors]) };
+  // One distractor differs only in the consonant and one only in the vowel,
+  // so getting it right means having heard both sounds.
+  const options = useMemo(() => {
+    const others = SYLLABLES.filter((s) => s !== target);
+    const sameVowel = shuffle(others.filter((s) => s.vowel === target.vowel))[0];
+    const sameOnset = shuffle(others.filter((s) => s.onset === target.onset))[0];
+    return shuffle([target, sameVowel, sameOnset]);
+  }, [target]);
+
+  // Say each new syllable without waiting for a tap. The first round follows
+  // the tap that opened the game, so browsers allow the sound.
+  useEffect(() => {
+    speak(syllableKey(target.syllable));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round]);
 
   const answer = (syllable) => {
-    if (syllable === question.target.syllable) {
+    if (feedback === "ok") return;
+    if (syllable === target.syllable) {
       setFeedback("ok");
-      speak(question.target.syllable, 0.7);
       setTimeout(() => {
         setFeedback(null);
-        setRound((value) => value + 1);
-      }, 850);
+        next();
+      }, 1100);
     } else {
       setFeedback("ko");
-      setTimeout(() => setFeedback(null), 600);
+      playTarget();
+      setTimeout(() => setFeedback(null), 900);
     }
   };
 
@@ -246,14 +229,14 @@ function ChooseGame({ onHome }) {
       <main className="max-w-2xl mx-auto p-5 text-center">
         <p className="text-slate-600 mt-6">Escolta. Quina síl·laba has sentit?</p>
         <button
-          onClick={() => speak(question.target.syllable, 0.62)}
+          onClick={playTarget}
           className="mt-8 w-40 h-40 rounded-full bg-white shadow-xl border text-7xl active:scale-95"
         >
           🔊
         </button>
 
         <div className="grid grid-cols-3 gap-3 mt-10">
-          {question.options.map((option) => (
+          {options.map((option) => (
             <button
               key={option.syllable}
               onClick={() => answer(option.syllable)}

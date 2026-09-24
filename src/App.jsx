@@ -127,8 +127,8 @@ function BlendGame({ onHome }) {
   };
 
   const playParts = () => {
-    speak(current.onset, 0.55);
-    setTimeout(() => speak(current.vowel, 0.65), 700);
+    speak(current.onset.repeat(6), 0.5);
+    setTimeout(() => speak(current.vowel.repeat(3), 0.6), 700);
   };
 
   const join = () => {
@@ -144,14 +144,14 @@ function BlendGame({ onHome }) {
 
         <div className="flex items-center justify-center gap-8 md:gap-16 mb-8">
           <button
-            onClick={() => speak(current.onset, 0.55)}
+            onClick={() => speak(current.onset.repeat(6), 0.5)}
             className="w-32 h-32 rounded-3xl bg-white shadow-lg border text-7xl font-black active:scale-95"
           >
             {current.onset}
           </button>
           <div className="text-4xl text-slate-400">+</div>
           <button
-            onClick={() => speak(current.vowel, 0.65)}
+            onClick={() => speak(current.vowel.repeat(3), 0.6)}
             className="w-32 h-32 rounded-3xl bg-white shadow-lg border text-7xl font-black active:scale-95"
           >
             {current.vowel}

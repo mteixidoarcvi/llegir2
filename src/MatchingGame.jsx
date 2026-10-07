@@ -3,6 +3,8 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { WORD_LISTS } from "./wordLists";
 import { useSpeech } from "./useSpeech";
+import { ScriptPicker } from "./SettingsControls";
+import { formatText, scriptClass } from "./settings";
 
 const STATS_STORAGE_KEY = "llegir2-stats-v1";
 const LAST_LIST_KEY = "llegir2-last-list";
@@ -48,11 +50,10 @@ function emptySelection() {
   return { word: null, sound: null, image: null };
 }
 
-export default function MatchingGame() {
+export default function MatchingGame({ script, onScriptChange }) {
   const [selectedListId, setSelectedListId] = useState(null);
   const [showStart, setShowStart] = useState(true);
   const [showStats, setShowStats] = useState(false);
-  const [uppercase, setUppercase] = useState(true);
   const [roundSize, setRoundSize] = useState(4);
   const [currentKeys, setCurrentKeys] = useState([]);
   const [completed, setCompleted] = useState([]);
@@ -191,8 +192,8 @@ export default function MatchingGame() {
         aria-label={`${type} ${item.key}`}
       >
         {type === "word" && (
-          <div className="text-3xl md:text-4xl font-bold tracking-widest text-black">
-            {uppercase ? item.key.toUpperCase() : item.key}
+          <div className={`text-3xl md:text-4xl font-bold tracking-widest text-black ${scriptClass(script)}`}>
+            {formatText(item.key, script)}
           </div>
         )}
         {type === "sound" && (
@@ -243,10 +244,7 @@ export default function MatchingGame() {
       </header>
 
       <div className="px-4 md:px-6 pb-2 flex items-center gap-3">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={uppercase} onChange={(e) => setUppercase(e.target.checked)} />
-          Majúscules
-        </label>
+        <ScriptPicker script={script} onChange={onScriptChange} compact />
         <label className="flex items-center gap-2 text-sm">
           Elements:
           <select

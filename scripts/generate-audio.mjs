@@ -144,9 +144,11 @@ async function main() {
 
   const words = await uniqueWords();
   const manifest = buildManifest(words);
+  // A syllable that is also a word ("no") reuses the word's clip, so the
+  // matching game never plays the slowed-down syllable instead.
   const clips = [
     ...words.map((word) => ({ key: word, file: manifest[word], ssml: wordSsml(word) })),
-    ...(await blendingClips()),
+    ...(await blendingClips()).filter((clip) => !(clip.key in manifest)),
   ];
   for (const clip of clips) manifest[clip.key] = clip.file;
   await mkdir(AUDIO_DIR, { recursive: true });

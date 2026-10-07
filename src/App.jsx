@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import MatchingGame from "./MatchingGame";
+import { OnsetPicker, ScriptPicker } from "./SettingsControls";
+import { formatText, scriptClass, useSettings } from "./settings";
 import { SYLLABLES, soundKey, syllableKey } from "./syllables";
 import { useSpeech } from "./useSpeech";
 
@@ -12,9 +14,12 @@ function shuffle(items) {
   return copy;
 }
 
-/** A shuffled pass through every syllable, so none repeats until all have come up. */
-function useSyllableDeck() {
-  const [deck, setDeck] = useState(() => shuffle(SYLLABLES));
+/**
+ * A shuffled pass through every syllable of the chosen consonants, so none
+ * repeats until all have come up.
+ */
+function useSyllableDeck(syllables) {
+  const [deck, setDeck] = useState(() => shuffle(syllables));
   const [index, setIndex] = useState(0);
 
   const next = () => {
@@ -23,7 +28,7 @@ function useSyllableDeck() {
       return;
     }
     // Avoid the same syllable twice in a row across two passes.
-    let fresh = shuffle(SYLLABLES);
+    let fresh = shuffle(syllables);
     if (fresh[0] === deck[index]) fresh = [...fresh.slice(1), fresh[0]];
     setDeck(fresh);
     setIndex(0);
@@ -32,20 +37,22 @@ function useSyllableDeck() {
   return { current: deck[index], next, round: `${deck.length}-${index}-${deck[0].syllable}` };
 }
 
-function ModePicker({ onSelect }) {
+const syllablesFor = (onsets) => SYLLABLES.filter((s) => onsets.includes(s.onset));
+
+function ModePicker({ onSelect, settings }) {
   const modes = [
     {
       id: "blend",
       icon: "🧲",
       title: "Ajunta els sons",
-      subtitle: "M + A → MA",
+      subtitle: `${formatText("M", settings.script)} + ${formatText("A", settings.script)} → ${formatText("MA", settings.script)}`,
       description: "Arrossega mentalment els sons fins que quedin enganxats.",
     },
     {
       id: "choose",
       icon: "👂",
       title: "Escolta i tria",
-      subtitle: "🔊 → MA / MO / SA",
+      subtitle: `🔊 → ${["MA", "MO", "SA"].map((s) => formatText(s, settings.script)).join(" / ")}`,
       description: "Escolta una síl·laba i troba com s'escriu.",
     },
     {
@@ -74,11 +81,23 @@ function ModePicker({ onSelect }) {
             >
               <div className="text-5xl mb-4">{mode.icon}</div>
               <div className="text-xl font-extrabold">{mode.title}</div>
-              <div className="text-indigo-700 font-bold mt-1">{mode.subtitle}</div>
+              <div className={`text-indigo-700 font-bold mt-1 ${mode.id !== "matching" ? scriptClass(settings.script) : ""}`}>
+                {mode.subtitle}
+              </div>
               <p className="text-sm text-slate-600 mt-3">{mode.description}</p>
             </button>
           ))}
         </div>
+
+        <section className="mt-6 bg-white rounded-3xl p-6 shadow border text-left">
+          <h2 className="text-lg font-extrabold mb-1">Tipus de lletra</h2>
+          <p className="text-sm text-slate-600 mb-3">Per a tots els jocs.</p>
+          <ScriptPicker script={settings.script} onChange={settings.setScript} />
+
+          <h2 className="text-lg font-extrabold mt-6 mb-1">Consonants</h2>
+          <p className="text-sm text-slate-600 mb-3">Les que surten a «Ajunta els sons» i «Escolta i tria».</p>
+          <OnsetPicker selected={settings.onsets} script={settings.script} onToggle={settings.toggleOnset} />
+        </section>
       </div>
     </main>
   );
@@ -96,8 +115,13 @@ function GameHeader({ title, onHome }) {
   );
 }
 
-function BlendGame({ onHome }) {
-  const { current, next: nextSyllable } = useSyllableDeck();
+function BlendGame({ onHome, settings }) {
+  const { current, next: nextSyllable } = useSyllableDeck(syllablesFor(settings.onsets));
+  const font = scriptClass(settings.script);
+  const show = (text) => formatText(text, settings.script);
+  // Joined letters have long ascenders and descenders (b, d, f, p), so they
+  // need a smaller size to stay inside the tiles.
+  const letterSize = settings.script === "cursive" ? "text-6xl" : "text-7xl";
   const [joined, setJoined] = useState(false);
   const { speak, speakSequence } = useSpeech();
 
@@ -106,7 +130,12 @@ function BlendGame({ onHome }) {
     nextSyllable();
   };
 
-  const playParts = () => speakSequence([soundKey(current.onset), soundKey(current.vowel)]);
+  // A stop has no sound of its own, so only the vowel plays; the hint below
+  // explains how to start it.
+  const playParts = () =>
+    current.stop
+      ? speak(soundKey(current.vowel))
+      : speakSequence([soundKey(current.onset), soundKey(current.vowel)]);
 
   // Play straight from the tap: mobile browsers may block sound started later.
   const join = () => {
@@ -122,38 +151,53 @@ function BlendGame({ onHome }) {
 
         <div className="flex items-center justify-center gap-8 md:gap-16 mb-8">
           <button
-            onClick={() => speak(soundKey(current.onset))}
-            className="w-32 h-32 rounded-3xl bg-white shadow-lg border text-7xl font-black active:scale-95"
+            onClick={() => !current.stop && speak(soundKey(current.onset))}
+            className={`relative w-32 h-32 p-0 rounded-3xl bg-white shadow-lg ${letterSize} font-black active:scale-95 ${font} ${
+              current.stop ? "border-2 border-dashed border-orange-300" : "border"
+            }`}
+            aria-label={current.stop ? `${current.onset}, so curt` : current.onset}
           >
-            {current.onset}
+            {show(current.onset)}
+            {current.stop && (
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 rounded-full bg-orange-100 text-orange-700 text-xs font-bold font-sans">
+                curt
+              </span>
+            )}
           </button>
           <div className="text-4xl text-slate-400">+</div>
           <button
             onClick={() => speak(soundKey(current.vowel))}
-            className="w-32 h-32 rounded-3xl bg-white shadow-lg border text-7xl font-black active:scale-95"
+            className={`w-32 h-32 p-0 rounded-3xl bg-white shadow-lg border ${letterSize} font-black active:scale-95 ${font}`}
           >
-            {current.vowel}
+            {show(current.vowel)}
           </button>
         </div>
 
+        {current.stop && (
+          <p className="max-w-sm mx-auto mb-5 text-orange-800 bg-orange-100 rounded-2xl px-4 py-3 font-semibold">
+            🤫 La <span className={font}>{show(current.onset)}</span> no es pot allargar. Posa la boca a punt i deixa
+            anar la <span className={font}>{show(current.vowel)}</span>!
+          </p>
+        )}
+
         <button onClick={playParts} className="px-5 py-3 rounded-2xl bg-white shadow border font-bold mb-6">
-          🔊 Escolta'ls separats
+          🔊 {current.stop ? "Escolta la vocal" : "Escolta'ls separats"}
         </button>
 
         <div className="relative h-36 flex items-center justify-center">
           <div
-            className={`absolute text-7xl font-black transition-all duration-700 ${
+            className={`absolute ${letterSize} font-black transition-all duration-700 ${font} ${
               joined ? "-translate-x-6" : "-translate-x-28"
             }`}
           >
-            {current.onset}
+            {show(current.onset)}
           </div>
           <div
-            className={`absolute text-7xl font-black transition-all duration-700 ${
+            className={`absolute ${letterSize} font-black transition-all duration-700 ${font} ${
               joined ? "translate-x-6" : "translate-x-28"
             }`}
           >
-            {current.vowel}
+            {show(current.vowel)}
           </div>
         </div>
 
@@ -168,9 +212,9 @@ function BlendGame({ onHome }) {
           <div>
             <button
               onClick={() => speak(syllableKey(current.syllable))}
-              className="text-8xl font-black tracking-wide bg-white rounded-3xl px-10 py-6 shadow-lg border"
+              className={`text-8xl font-black tracking-wide bg-white rounded-3xl px-10 py-6 shadow-lg border ${font}`}
             >
-              {current.syllable}
+              {show(current.syllable)}
             </button>
             <p className="mt-4 font-semibold">Digues-ho tu també!</p>
             <button
@@ -186,20 +230,22 @@ function BlendGame({ onHome }) {
   );
 }
 
-function ChooseGame({ onHome }) {
-  const { current: target, next, round } = useSyllableDeck();
+function ChooseGame({ onHome, settings }) {
+  const syllables = useMemo(() => syllablesFor(settings.onsets), [settings.onsets]);
+  const { current: target, next, round } = useSyllableDeck(syllables);
   const [feedback, setFeedback] = useState(null);
   const { speak } = useSpeech();
   const playTarget = () => speak(syllableKey(target.syllable));
 
   // One distractor differs only in the consonant and one only in the vowel,
-  // so getting it right means having heard both sounds.
+  // so getting it right means having heard both sounds. With a single
+  // consonant chosen there is no consonant to swap, so both differ in the vowel.
   const options = useMemo(() => {
-    const others = SYLLABLES.filter((s) => s !== target);
-    const sameVowel = shuffle(others.filter((s) => s.vowel === target.vowel))[0];
-    const sameOnset = shuffle(others.filter((s) => s.onset === target.onset))[0];
-    return shuffle([target, sameVowel, sameOnset]);
-  }, [target]);
+    const others = shuffle(syllables.filter((s) => s !== target));
+    const sameVowel = others.find((s) => s.vowel === target.vowel);
+    const sameOnset = others.filter((s) => s.onset === target.onset);
+    return shuffle([target, sameVowel ?? sameOnset[1], sameOnset[0]]);
+  }, [syllables, target]);
 
   // Say each new syllable without waiting for a tap. The first round follows
   // the tap that opened the game, so browsers allow the sound.
@@ -240,9 +286,11 @@ function ChooseGame({ onHome }) {
             <button
               key={option.syllable}
               onClick={() => answer(option.syllable)}
-              className="bg-white rounded-3xl py-8 text-4xl md:text-5xl font-black shadow border active:scale-95"
+              className={`bg-white rounded-3xl py-8 text-4xl md:text-5xl font-black shadow border active:scale-95 ${scriptClass(
+                settings.script
+              )}`}
             >
-              {option.syllable}
+              {formatText(option.syllable, settings.script)}
             </button>
           ))}
         </div>
@@ -258,10 +306,11 @@ function ChooseGame({ onHome }) {
 
 export default function App() {
   const [mode, setMode] = useState(null);
+  const settings = useSettings();
 
-  if (!mode) return <ModePicker onSelect={setMode} />;
-  if (mode === "blend") return <BlendGame onHome={() => setMode(null)} />;
-  if (mode === "choose") return <ChooseGame onHome={() => setMode(null)} />;
+  if (!mode) return <ModePicker onSelect={setMode} settings={settings} />;
+  if (mode === "blend") return <BlendGame onHome={() => setMode(null)} settings={settings} />;
+  if (mode === "choose") return <ChooseGame onHome={() => setMode(null)} settings={settings} />;
   return (
     <div>
       <button
@@ -270,7 +319,7 @@ export default function App() {
       >
         ← Jocs
       </button>
-      <MatchingGame />
+      <MatchingGame script={settings.script} onScriptChange={settings.setScript} />
     </div>
   );
 }

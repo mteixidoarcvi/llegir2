@@ -57,14 +57,41 @@ button:focus-visible {
 }
 
 /* Letter styles a child can pick (see src/settings.js). */
+@font-face {
+  font-family: "Escolar";
+  src: url("./assets/fonts/Escolar.ttf") format("truetype");
+  font-display: block;
+}
 .font-print {
   font-family: "Andika", system-ui, sans-serif;
 }
 /* Joined handwriting only connects when letters sit at their natural spacing,
    so cancel any tracking-* utility on the same element. */
 .font-cursive {
-  font-family: "Playwrite ES", cursive;
+  font-family: "Escolar", cursive;
   font-weight: 400 !important;
   letter-spacing: normal !important;
   line-height: 1.4 !important;
+}
+
+/* "Ajunta els sons": once joined, the two letters slide together, then the
+   whole syllable appears below them. */
+@keyframes join-left {
+  from { transform: translateX(-7rem); }
+  to { transform: translateX(-1.5rem); }
+}
+@keyframes join-right {
+  from { transform: translateX(7rem); }
+  to { transform: translateX(1.5rem); }
+}
+@keyframes join-result {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+.join-left { animation: join-left 0.7s ease-in-out both; }
+.join-right { animation: join-right 0.7s ease-in-out both; }
+.join-result { animation: join-result 0.35s ease-out 0.7s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .join-left, .join-right, .join-result { animation-duration: 0.01s; animation-delay: 0s; }
 }

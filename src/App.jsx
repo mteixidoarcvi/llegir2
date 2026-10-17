@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import MatchingGame from "./MatchingGame";
-import { OnsetPicker, ScriptPicker } from "./SettingsControls";
+import { BlendLevelPicker, OnsetPicker, ScriptPicker } from "./SettingsControls";
 import { formatText, scriptClass, useSettings } from "./settings";
 import { SYLLABLES, soundKey, syllableKey } from "./syllables";
 import { useSpeech } from "./useSpeech";
@@ -97,6 +97,10 @@ function ModePicker({ onSelect, settings }) {
           <h2 className="text-lg font-extrabold mt-6 mb-1">Consonants</h2>
           <p className="text-sm text-slate-600 mb-3">Les que surten a «Ajunta els sons» i «Escolta i tria».</p>
           <OnsetPicker selected={settings.onsets} script={settings.script} onToggle={settings.toggleOnset} />
+
+          <h2 className="text-lg font-extrabold mt-6 mb-1">Nivell d'«Ajunta els sons»</h2>
+          <p className="text-sm text-slate-600 mb-3">Quan sona la síl·laba ajuntada.</p>
+          <BlendLevelPicker level={settings.blendLevel} onChange={settings.setBlendLevel} />
         </section>
       </div>
     </main>
@@ -123,6 +127,7 @@ function BlendGame({ onHome, settings }) {
   // need a smaller size to stay inside the tiles.
   const letterSize = settings.script === "cursive" ? "text-6xl" : "text-7xl";
   const [joined, setJoined] = useState(false);
+  const advanced = settings.blendLevel === "advanced";
   const { speak, speakSequence } = useSpeech();
 
   const next = () => {
@@ -138,9 +143,11 @@ function BlendGame({ onHome, settings }) {
       : speakSequence([soundKey(current.onset), soundKey(current.vowel)]);
 
   // Play straight from the tap: mobile browsers may block sound started later.
+  // In the advanced level the child reads the syllable first, so it stays
+  // silent until they tap it.
   const join = () => {
     setJoined(true);
-    speak(syllableKey(current.syllable));
+    if (!advanced) speak(syllableKey(current.syllable));
   };
 
   return (
@@ -184,23 +191,6 @@ function BlendGame({ onHome, settings }) {
           🔊 {current.stop ? "Escolta la vocal" : "Escolta'ls separats"}
         </button>
 
-        <div className="relative h-36 flex items-center justify-center">
-          <div
-            className={`absolute ${letterSize} font-black transition-all duration-700 ${font} ${
-              joined ? "-translate-x-6" : "-translate-x-28"
-            }`}
-          >
-            {show(current.onset)}
-          </div>
-          <div
-            className={`absolute ${letterSize} font-black transition-all duration-700 ${font} ${
-              joined ? "translate-x-6" : "translate-x-28"
-            }`}
-          >
-            {show(current.vowel)}
-          </div>
-        </div>
-
         {!joined ? (
           <button
             onClick={join}
@@ -210,13 +200,19 @@ function BlendGame({ onHome, settings }) {
           </button>
         ) : (
           <div>
+            <div className="relative h-36 flex items-center justify-center" aria-hidden>
+              <div className={`absolute ${letterSize} font-black join-left ${font}`}>{show(current.onset)}</div>
+              <div className={`absolute ${letterSize} font-black join-right ${font}`}>{show(current.vowel)}</div>
+            </div>
             <button
               onClick={() => speak(syllableKey(current.syllable))}
-              className={`text-8xl font-black tracking-wide bg-white rounded-3xl px-10 py-6 shadow-lg border ${font}`}
+              className={`text-8xl font-black tracking-wide bg-white rounded-3xl px-10 py-6 shadow-lg border join-result ${font}`}
             >
               {show(current.syllable)}
             </button>
-            <p className="mt-4 font-semibold">Digues-ho tu també!</p>
+            <p className="mt-4 font-semibold">
+              {advanced ? "Llegeix-ho tu! Després toca-ho per comprovar-ho 🔊" : "Digues-ho tu també!"}
+            </p>
             <button
               onClick={next}
               className="mt-7 px-7 py-4 rounded-2xl bg-emerald-600 text-white text-xl font-bold shadow"

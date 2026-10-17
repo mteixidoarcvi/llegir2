@@ -1,5 +1,5 @@
 import React from "react";
-import { SCRIPTS, formatText, scriptClass } from "./settings";
+import { BLEND_LEVELS, SCRIPTS, formatText, scriptClass } from "./settings";
 import { ONSETS } from "./syllables";
 
 export function ScriptPicker({ script, onChange, compact = false }) {
@@ -75,6 +75,30 @@ export function OnsetPicker({ selected, script, onToggle }) {
         script={script}
         onToggle={onToggle}
       />
+    </div>
+  );
+}
+
+export function BlendLevelPicker({ level, onChange }) {
+  return (
+    <div className="grid sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Nivell">
+      {BLEND_LEVELS.map((option) => {
+        const active = option.id === level;
+        return (
+          <button
+            key={option.id}
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.id)}
+            className={`rounded-2xl text-left px-4 py-3 ${
+              active ? "bg-indigo-600 text-white border-indigo-600 shadow" : "bg-white text-slate-600 border-slate-200"
+            }`}
+          >
+            <span className="font-bold block">{option.label}</span>
+            <span className={`text-xs block ${active ? "text-indigo-100" : "text-slate-500"}`}>{option.hint}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

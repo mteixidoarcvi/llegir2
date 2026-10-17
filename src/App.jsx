@@ -99,7 +99,7 @@ function ModePicker({ onSelect, settings }) {
           <OnsetPicker selected={settings.onsets} script={settings.script} onToggle={settings.toggleOnset} />
 
           <h2 className="text-lg font-extrabold mt-6 mb-1">Nivell d'«Ajunta els sons»</h2>
-          <p className="text-sm text-slate-600 mb-3">Quan sona la síl·laba ajuntada.</p>
+          <p className="text-sm text-slate-600 mb-3">Com es presenta cada síl·laba.</p>
           <BlendLevelPicker level={settings.blendLevel} onChange={settings.setBlendLevel} />
         </section>
       </div>
@@ -143,12 +143,35 @@ function BlendGame({ onHome, settings }) {
       : speakSequence([soundKey(current.onset), soundKey(current.vowel)]);
 
   // Play straight from the tap: mobile browsers may block sound started later.
-  // In the advanced level the child reads the syllable first, so it stays
-  // silent until they tap it.
   const join = () => {
     setJoined(true);
-    if (!advanced) speak(syllableKey(current.syllable));
+    speak(syllableKey(current.syllable));
   };
+
+  // Advanced: the syllable is already joined and the child reads it alone; the
+  // button is only there to check.
+  if (advanced) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50">
+        <GameHeader title="Ajunta els sons" onHome={onHome} />
+        <main className="max-w-2xl mx-auto px-5 py-12 text-center">
+          <div className={`text-9xl font-black tracking-wide py-6 ${font}`}>{show(current.syllable)}</div>
+          <button
+            onClick={() => speak(syllableKey(current.syllable))}
+            className="mt-8 w-28 h-28 rounded-full bg-white shadow-xl border text-5xl active:scale-95"
+            aria-label="Escolta"
+          >
+            🔊
+          </button>
+          <div>
+            <button onClick={next} className="mt-10 px-7 py-4 rounded-2xl bg-emerald-600 text-white text-xl font-bold shadow">
+              Següent →
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50">
@@ -210,9 +233,7 @@ function BlendGame({ onHome, settings }) {
             >
               {show(current.syllable)}
             </button>
-            <p className="mt-4 font-semibold">
-              {advanced ? "Llegeix-ho tu! Després toca-ho per comprovar-ho 🔊" : "Digues-ho tu també!"}
-            </p>
+            <p className="mt-4 font-semibold">Digues-ho tu també!</p>
             <button
               onClick={next}
               className="mt-7 px-7 py-4 rounded-2xl bg-emerald-600 text-white text-xl font-bold shadow"

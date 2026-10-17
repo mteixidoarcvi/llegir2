@@ -24,13 +24,12 @@ export function scriptClass(script) {
 }
 
 /**
- * How "Ajunta els sons" reveals the syllable. In the easy level it is said as
- * soon as the letters join; in the advanced one the child reads it first and
- * taps it to check.
+ * How "Ajunta els sons" is played. The easy level walks through each sound and
+ * joins them; the advanced one just shows the syllable, with a button to hear it.
  */
 export const BLEND_LEVELS = [
-  { id: "easy", label: "Fàcil", hint: "En ajuntar-los, se sent la síl·laba." },
-  { id: "advanced", label: "Avançat", hint: "Primer la llegeix i després toca per comprovar-ho." },
+  { id: "easy", label: "Fàcil", hint: "Escolta cada so i després els ajunta." },
+  { id: "advanced", label: "Avançat", hint: "Només la síl·laba i un botó per escoltar-la." },
 ];
 
 const DEFAULTS = { script: "upper", onsets: DEFAULT_ONSETS, blendLevel: "easy" };
